@@ -100,6 +100,7 @@ class CorrectionGenerator:
 
     @lru_cache(maxsize=128)
     def candidates(self, word, fs):
+        print('Generate candidate for:', word)
         res = fs.generate_candidates(word)
         soundex_code = self.soundex_encoder.transform(word)
         if soundex_code in self.soundex_dict:
@@ -112,77 +113,89 @@ class CorrectionGenerator:
                                      candidate))
 
         res = np.unique(res, axis=0)
-        #print(word, '-->', res[:10])
+        print(word, '-->', res[:10])
         scores = res[:,0].astype('float') * res[:,1].astype('float')
         arg_scores = np.argsort(scores)
 
-        return zip(scores[arg_scores], res[arg_scores, 2])
+        return list(zip(scores[arg_scores], res[arg_scores, 2]))
 
     #@logger.catch
     def generate(self, query, correction_mask): #query is tokens
         corrections = {}
+        print(query, np.where(correction_mask == 0)[0])
         for index in np.where(correction_mask == 0)[0]:
+            print(index)
             corrections[index] = self.candidates(query[index], self.fuzzy_search)
 
+        print(corrections)
         fixed_query = self.find_best_pairs(corrections, query)
-
-        return [fixed_query]
+        print(fixed_query)
+        return fixed_query
 
 
     def find_best_pairs(self, corrections, queries):
+        bit_mask = 0
         fixed_query = [token for token in queries]
-
-        correction_found = False
+        fixed_candidates = []
 
         for index in corrections:
             if index == 0:
-                fixed_query[index] = next(corrections[index])[1] #если первое слово, то выбираем лучшее по весу
-                correction_found = True
-                #print('first word: ', fixed_query[index])
+                fixed_candidates.append((index, index + 1, [corrections[index][1]],
+                                         1 << (len(queries) - index - 1))) #если первое слово, то выбираем лучшее по весу
+                #bit_mask |= 1 << (len(queries) - index - 1)
             else:
                 score = self.lan_model.P_query(None, 'bigram', tuple(fixed_query[:index + 1]))[0] #без исправления такой вес
                 best_word = None
                 for weight, fixed_word in corrections[index]:
 
                     current_score = self.lan_model.P_query(None, 'bigram', tuple(fixed_query[:index] + [fixed_word]))[0]
-                    #print(fixed_word, current_score)
+                    print(fixed_word, current_score, score)
                     if current_score > score:
                         score = current_score
                         best_word = fixed_word
 
                 if best_word:
-                    fixed_query[index] = best_word
-                    correction_found = True
-        #print('After finding pairs: ', fixed_query)
+                    fixed_candidates.append((index, index + 1, [best_word], 1 << (len(queries) - index - 1))) #
+                    #bit_mask |= 1 << (len(queries) - index - 1) # ставим 1 на месте исправленного слова
 
-        if correction_found:
-            return fixed_query
-        else:
-            return None
+
+        return fixed_candidates
 
 
 class JoinGenerator:
-    def __init__(self, lm):
+    def __init__(self, lm, soundex):
         self.lan_model = lm
         self.model = RandomForestClassifier(min_samples_split=10,
                                             min_samples_leaf=5,
                                             max_features='sqrt',
                                             max_samples=0.7)
 
+        self.soundex_dict = soundex
+        self.soundex_encoder = RussianSoundex(delete_first_letter=True)
+
     def fit(self, X, y):
         self.model.fit(X, y)
 
 
     def generate(self, tokens, correction_mask):
-        new_tokens = [tokens[0]]
-        for i, (token_1, token_2) in enumerate(zip(tokens, tokens[1:])):
-            prob = self.predict(new_tokens[-1], token_2)
+        fixed_candidates = []
+        for i, (mask_1, mask_2) in enumerate(zip(correction_mask, correction_mask[1:])):
+            if mask_1 and mask_2:
+                continue
 
-            if prob[0][1] > 0.9:
-                new_tokens[-1] += token_2
-            else:
-                new_tokens.append(token_2)
-        return new_tokens
+            soundex_code = self.soundex_encoder.transform(tokens[i] + tokens[i + 1])
+            if soundex_code in self.soundex_dict:
+                for candidate, count in self.soundex_dict[soundex_code][:2]:
+                    fixed_candidates.append((i, i + 2, [candidate], 3 << (len(tokens) - i - 2)))
+
+            p_1 = self.lan_model.P_query(tokens[i], 'unigram')[1]
+            p_2 = self.lan_model.P_query(tokens[i + 1], 'unigram')[1]
+            p_3 = self.lan_model.P_query(tokens[i] + tokens[i + 1], 'unigram')[1]
+
+            if p_3 <= max(p_1, p_2): #если вероятность джойна больше чем худшего из токенов
+                fixed_candidates.append((i, i + 2,  [tokens[i] + tokens[i + 1]], 3 << (len(tokens) - i - 2)))
+
+        return fixed_candidates
 
 
     @lru_cache(maxsize=128)

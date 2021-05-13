@@ -32,7 +32,9 @@ class FuzzySearch:
         flag = True
         result = []
 
-        k=2
+        k = max(min(2, len(orig) - 1), 1)
+        print('K', k)
+
         iteration=0
         while flag:
             iteration += 1
@@ -40,6 +42,9 @@ class FuzzySearch:
             flag = False
 
             for w, (orig_prefix, fix_prefix, node) in q_last:
+                if len(orig_prefix) == 2 and  len(orig) == 1:
+                    print(orig_prefix, fix_prefix)
+
                 if len(orig_prefix) < len(orig):
                     flag = True
                     self.gen_on_node(q_cur, w, orig_prefix + orig[len(orig_prefix)], fix_prefix, node) #замена
@@ -47,7 +52,7 @@ class FuzzySearch:
                     if len(orig_prefix) + k >= len(fix_prefix):
                         self.gen_on_node(q_cur, w, orig_prefix, fix_prefix, node) #вставка
 
-                    if len(orig_prefix) + 1 < len(orig) and len(orig_prefix) <= len(fix_prefix) - k:
+                    if len(orig_prefix) + 1 < len(orig) and len(orig_prefix) - k <= len(fix_prefix):
                         self.gen_on_node(q_cur, w, orig_prefix + orig[len(orig_prefix): len(orig_prefix) + 2],
                                       fix_prefix, node) #удаление
 
@@ -70,7 +75,7 @@ class FuzzySearch:
     def weight(self, pref_orig, pref_fix, freq):
         #w = self.alpha * self.lan_model(pref_fix)[-3] * -1
         w = self.alpha * freq
-        #print(pref_orig, pref_fix, self.alpha * freq, np.log(em.probability(pref_orig, pref_fix)),
+        #print(pref_orig, pref_fix, self.alpha * freq, np.log(self.err_model.probability(pref_orig, pref_fix)))
         #      self.alpha * freq +  np.log(em.probability(pref_orig, pref_fix)))
         w += np.log(self.err_model.probability(pref_orig, pref_fix))
         return w
