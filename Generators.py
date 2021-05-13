@@ -222,29 +222,33 @@ class SplitGenerator:
         return corrections
 
     def candidates(self, word, index, query_len):
+        #print('candidates: ', word)
         if len(word) == 1:
             return []
 
         fixed_candidates = []
-        p_3 = self.lan_model.P_query(word, 'unigram')[1]
+        p_3 = [self.lan_model.P_query(word, 'unigram')[1],  self.lan_model.P_query(word, 'trigram_char')[1]]
+        max_w = float('inf')
 
-        for i in range(1, len(word) - 1):
+        for i in range(1, len(word)):
             token_1 = word[:i]
             token_2 = word[i:]
 
-            condition = self.condition(token_1, token_2, p_3)
+            condition, w = self.condition(token_1, token_2, p_3)
 
-            if condition: #если вероятность хб одной части больше чем всего токена
-                fixed_candidates.append((index, index + 1,  [token_1, token_2], 1 << (query_len - index - 1)))
+            if condition and w < max_w: #если вероятность хб одной части больше чем всего токена
+                fixed_candidates = [(index, index + 1,  [token_1, token_2], 1 << (query_len - index - 1))]
+                max_w = w
 
         return fixed_candidates
 
-    @lru_cache(maxsize=128)
     def condition(self, token_1, token_2, p_3):
         p_1 = self.lan_model.P_query(token_1, 'unigram')[1]
         p_2 = self.lan_model.P_query(token_2, 'unigram')[1]
 
-        return p_3 > max(p_1, p_2)
+        p_4 = self.lan_model.P_query(token_1 + " " + token_2, 'trigram_char')[1]
+        #print(token_1, token_2, p_1, p_2, p_3, p_4)
+        return p_3[0] > max(p_1, p_2) and p_4 <= p_3[1], p_3[1] - p_4
 
 
 

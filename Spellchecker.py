@@ -33,7 +33,7 @@ class Spellchecker:
                                                            self.fuzzy_search,
                                                            self.soundex)
         self.generators['join'] = JoinGenerator(self.lan_model, self.soundex)
-        #self.generators['split'] = SplitGenerator(self.lan_model)
+        self.generators['split'] = SplitGenerator(self.lan_model)
 
         self.iter_count = 3
 
@@ -148,8 +148,13 @@ def process_queries(filename):
 #%%
 if __name__ == '__main__':
     spellchecker = Spellchecker()
-    #spellchecker.start()
-    queries, queries_correction = process_queries('queries_all.txt')
+    spellchecker.start()
+    #queries, queries_correction = process_queries('queries_all.txt')
 
-    for query in queries[:100]:
-        print(spellchecker.process_query(query))
+    #count = 0
+    #for query in queries_correction[:300]:
+    #    fixed_query = spellchecker.process_query(query[0])
+    #    if query[1].strip() == fixed_query:
+    #        count += 1
+        #print(query[1])
+    #print(f'Result: {count / 300}')
