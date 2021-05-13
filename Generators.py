@@ -68,8 +68,8 @@ class KeyboardSwapper:
 
         if condition > border:
         #if case_1 or case_2 or case_3 or case_4:
-            print(token,'-->', result, round(score_1, 3), round(score_2, 3), round(score_1 / score_2, 3),
-                  round(self.lan_model(result)[1]  / self.lan_model(token)[1], 3))
+            #print(token,'-->', result, round(score_1, 3), round(score_2, 3), round(score_1 / score_2, 3),
+            #      round(self.lan_model(result)[1]  / self.lan_model(token)[1], 3))
 
             return result
         else:

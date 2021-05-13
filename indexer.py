@@ -28,7 +28,7 @@ def process_queries(filename):
     return queries, queries_correction
 
 
-def fit_models(alpha_em=1.2, oper_weights=[0.7, 1.1, 0.9, 0.8]):
+def fit_models(alpha_em=1.2, oper_weights=[0.7, 0.8, 0.9, 0.8]):
     queries, queries_correction = process_queries('queries_all.txt')
 
     print('Fitting language model...')
