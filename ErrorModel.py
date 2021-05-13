@@ -5,7 +5,7 @@ import numpy as np
 import pickle
 
 class ErrorModel:
-    def __init__(self, alpha=1.1, oper_weights=[0.7, 1.1, 0.9, 0.8]):
+    def __init__(self, alpha=1.1, oper_weights=[0.6, 0.8, 0.9, 0.8]):
         self.alpha = alpha
 
         self.oper_weights = {'replace': oper_weights[0],

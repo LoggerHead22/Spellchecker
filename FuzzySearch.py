@@ -33,7 +33,7 @@ class FuzzySearch:
         result = []
 
         k = max(min(2, len(orig) - 1), 1)
-        print('K', k)
+        #print('K', k)
 
         iteration=0
         while flag:

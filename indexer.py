@@ -7,10 +7,8 @@ from LanguageModel import LanguageModel
 from ErrorModel import ErrorModel
 from Generators import JoinGenerator, SplitGenerator
 from FuzzySearch import FuzzySearch
-from Classifier import FixNoneClassifier
 from ru_soundex.soundex import RussianSoundex
 from collections import Counter, defaultdict
-from loguru import logger
 
 
 def process_queries(filename):
@@ -29,7 +27,7 @@ def process_queries(filename):
 
     return queries, queries_correction
 
-@logger.catch
+
 def fit_models(alpha_em=1.2, oper_weights=[0.7, 1.1, 0.9, 0.8]):
     queries, queries_correction = process_queries('queries_all.txt')
 
@@ -53,33 +51,6 @@ def fit_models(alpha_em=1.2, oper_weights=[0.7, 1.1, 0.9, 0.8]):
     fs = FuzzySearch(0.02, lm, em)
     fs.fit(queries)
 
-    if False:
-        queries_uno, queries_double = sample_random_words(queries)
-        join_gen = JoinGenerator(lm)
-        split_gen = SplitGenerator(lm)
-
-        splitted_query = join_gen.build_split(queries_uno)
-        joined_query = split_gen.build_join(queries_double)
-
-        print('Fitting Join Classifier...')
-        t1 = time.process_time()
-        X_join, y_join = join_gen.build_join_X(queries_double, splitted_query)
-        join_gen.fit(X_join, y_join)
-
-        print('Join Classifier fitted, time:', time.process_time() - t1)
-
-        print('Fitting Split Classifier...')
-        t1 = time.process_time()
-        X_split, y_split = split_gen.build_split_X(queries_uno, joined_query)
-        split_gen.fit(X_split, y_split)
-
-        print('Split Classifier fitted, time:', time.process_time() - t1)
-
-        with open('join_split_generators.pcl', 'wb') as f:
-            pickle.dump((join_gen, split_gen), f)
-
-
-
     print('Fitting Soundex collection')
     t1 = time.process_time()
     words = itertools.chain(*map(lambda x: re.findall(r'\w+', x),  queries))
@@ -94,11 +65,17 @@ def fit_models(alpha_em=1.2, oper_weights=[0.7, 1.1, 0.9, 0.8]):
                 else:
                     soundex_dict[code].update([word])
             except:
-                print('Error word:', word)
+                #print('Error word:', word)
                 continue
-
+    del_list = []
     for key in soundex_dict:
-        soundex_dict[key] = soundex_dict[key].most_common(5)
+        if key.isupper():
+            del_list.append(key)
+        else:
+            soundex_dict[key] = soundex_dict[key].most_common(5)
+
+    for key in del_list:
+        del soundex_dict[key]
 
     print('Soundex collection fitted, time:', time.process_time() - t1)
 
@@ -134,10 +111,5 @@ def sample_random_words(queries):
 
 if __name__ == '__main__':
     fit_models()
-    #import gc
-    #gc.collect()
-    #with open('em.pcl', 'rb') as f:
-    #    em = pickle.load(f)
-#%%
-    #print(em.probability('пагода', 'погода'))
+
 

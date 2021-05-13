@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 import heapq
+import sys
 from LanguageModel import LanguageModel
 from ErrorModel import ErrorModel
 from Generators import KeyboardSwapper, SplitGenerator, JoinGenerator
@@ -32,6 +33,7 @@ class Spellchecker:
                                                            self.fuzzy_search,
                                                            self.soundex)
         self.generators['join'] = JoinGenerator(self.lan_model, self.soundex)
+        #self.generators['split'] = SplitGenerator(self.lan_model)
 
         self.iter_count = 3
 
@@ -53,7 +55,7 @@ class Spellchecker:
             if new_query is None:
                 break
             else:
-                print(f'After iter {i}: ', new_query)
+                #print(f'After iter {i}: ', new_query)
                 old_query = new_query
 
         return " ".join(old_query)
@@ -64,20 +66,21 @@ class Spellchecker:
         if np.sum(correction_mask) == len(query):
             return None  #коррекция не нужна
 
-        print(correction_mask)
+        #print(correction_mask)
         fixed_queries = []
         p_bigrams = self.lan_model.P_query(None, 'bigram', tuple(query))[1]
 
         for generator in self.generators:
-            print(generator)
+
             fixed_query = self.generators[generator].generate(query, correction_mask)
+            #print(generator,'--->',fixed_query)
             if fixed_query:
                 fixed_queries += fixed_query
 
         if len(fixed_queries) == 0:
             return None
 
-        print(fixed_queries)
+        #print(fixed_queries)
         final_fixes = []
         bit_mask = 0
         bin_array = np.zeros((len(fixed_queries)), dtype='int')
@@ -94,7 +97,7 @@ class Spellchecker:
                                                                  'bigram',
                                                                  tuple(fixed_query)
                                                                  )[1])
-            print(scores)
+            #print(scores)
             argmax = np.argmax(scores)
             if scores[argmax] <= 0:
                 break
@@ -102,9 +105,9 @@ class Spellchecker:
                 bit_mask |= bin_array[candidates[argmax]]
                 heapq.heappush(final_fixes, fixed_queries[candidates[argmax]])
                 candidates = np.where(np.bitwise_and(bin_array , bit_mask) == 0)[0]
-                print(bin(bit_mask), candidates)
+                #print(bin(bit_mask), candidates)
 
-        print('Final fixes', final_fixes)
+        #print('Final fixes', final_fixes)
 
         if len(final_fixes) > 0:
             final_fixes.sort()
@@ -123,8 +126,8 @@ class Spellchecker:
 
 
     def start(self):
-        pass
-        #while query = input().strip():
+        for line in sys.stdin:
+            print(self.process_query(line.strip()))
 
 def process_queries(filename):
     with open(filename, encoding = 'utf-8') as f:
@@ -145,49 +148,4 @@ def process_queries(filename):
 #%%
 if __name__ == '__main__':
     spellchecker = Spellchecker()
-
-#%%
-    #print(spellchecker.generators.keys())
-    #print(spellchecker.generators['correction'].generate(['когда', 'рас', 'пускаются', 'почки']))
-
-#%%
-    #print(spellchecker.generators['correction'].generate(['когда', 'распускаются', 'почки']))
-    #print(spellchecker.generators['correction'].generate(['когда', 'распускаются', 'почки']))
-#%%
-    #print(spellchecker.lan_model.P_query(None, 'bigram', ('когда', 'нас', 'пускаются', 'точки')))
-    #print(spellchecker.lan_model.P_query(None, 'bigram', ('когда', 'распускаются', 'почки')))
-
-#%%
-    queries, queries_correction = process_queries('queries_all.txt')
-
-    print(spellchecker.process_query(queries[0]))
-#%%
-    for query in queries[:10]:
-        print('RESULT: ', query,'--->', spellchecker.process_query(query))
-
-
-#%%
-    print(spellchecker.process_query('мебель для ванной de aqua'))
-
-#%%
-    for query in queries_correction[:50]:
-        print('RESULT: ', query[0],'--->', spellchecker.process_query(query[0]))
-        print('Answer: ', query[1])
-
-#%%
-
-    print(spellchecker.process_query('вайт и вв личний кбинет'))
-
-#%%
-    print(spellchecker.fuzzy_search.generate_candidates('вв'))
-    print(spellchecker.lan_model('дорогие'))
-
-    print(spellchecker.err_model.probability('вв','в'))
-    print(spellchecker.err_model.probability('восьма','возьми'))
-    print(spellchecker.err_model.probability('восьма','весна'))
-
-#%%
-
-    join = JoinGenerator(spellchecker.lan_model)
-
-    print(join.generate(['пойд', 'м', 'в'], [0, 0, 1]))
+    spellchecker.start()

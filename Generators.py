@@ -10,10 +10,7 @@ from FuzzySearch import FuzzySearch
 from functools import lru_cache
 from sklearn.ensemble import RandomForestClassifier
 from ru_soundex.soundex import RussianSoundex
-from loguru import logger
-import snoop
-import heartrate
-#heartrate.trace(browser=True)
+
 
 class KeyboardSwapper:
     def __init__(self, lm):
@@ -100,7 +97,7 @@ class CorrectionGenerator:
 
     @lru_cache(maxsize=128)
     def candidates(self, word, fs):
-        print('Generate candidate for:', word)
+
         res = fs.generate_candidates(word)
         soundex_code = self.soundex_encoder.transform(word)
         if soundex_code in self.soundex_dict:
@@ -111,9 +108,11 @@ class CorrectionGenerator:
                 heapq.heappush(res, (candidate_weight,
                                      self.lan_model.P_query(candidate, 'unigram')[1],
                                      candidate))
+        if len(res) == 0:
+            return []
 
         res = np.unique(res, axis=0)
-        print(word, '-->', res[:10])
+        #print(word, '-->', res[:10])
         scores = res[:,0].astype('float') * res[:,1].astype('float')
         arg_scores = np.argsort(scores)
 
@@ -122,25 +121,27 @@ class CorrectionGenerator:
     #@logger.catch
     def generate(self, query, correction_mask): #query is tokens
         corrections = {}
-        print(query, np.where(correction_mask == 0)[0])
+        #print(query, np.where(correction_mask == 0)[0])
         for index in np.where(correction_mask == 0)[0]:
-            print(index)
-            corrections[index] = self.candidates(query[index], self.fuzzy_search)
+            #print(index)
+            candidate = self.candidates(query[index], self.fuzzy_search)
+            if candidate:
+                corrections[index] = candidate
 
-        print(corrections)
+        #print(corrections)
         fixed_query = self.find_best_pairs(corrections, query)
-        print(fixed_query)
+        #print(fixed_query)
         return fixed_query
 
 
     def find_best_pairs(self, corrections, queries):
-        bit_mask = 0
+
         fixed_query = [token for token in queries]
         fixed_candidates = []
 
         for index in corrections:
             if index == 0:
-                fixed_candidates.append((index, index + 1, [corrections[index][1]],
+                fixed_candidates.append((index, index + 1, [corrections[index][0][1]],
                                          1 << (len(queries) - index - 1))) #если первое слово, то выбираем лучшее по весу
                 #bit_mask |= 1 << (len(queries) - index - 1)
             else:
@@ -149,7 +150,7 @@ class CorrectionGenerator:
                 for weight, fixed_word in corrections[index]:
 
                     current_score = self.lan_model.P_query(None, 'bigram', tuple(fixed_query[:index] + [fixed_word]))[0]
-                    print(fixed_word, current_score, score)
+                    #print(fixed_word, current_score, score)
                     if current_score > score:
                         score = current_score
                         best_word = fixed_word
@@ -188,56 +189,20 @@ class JoinGenerator:
                 for candidate, count in self.soundex_dict[soundex_code][:2]:
                     fixed_candidates.append((i, i + 2, [candidate], 3 << (len(tokens) - i - 2)))
 
-            p_1 = self.lan_model.P_query(tokens[i], 'unigram')[1]
-            p_2 = self.lan_model.P_query(tokens[i + 1], 'unigram')[1]
-            p_3 = self.lan_model.P_query(tokens[i] + tokens[i + 1], 'unigram')[1]
+            condition = self.condition(tokens[i], tokens[i+1])
 
-            if p_3 <= max(p_1, p_2): #если вероятность джойна больше чем худшего из токенов
+            if condition: #если вероятность джойна больше чем худшего из токенов
                 fixed_candidates.append((i, i + 2,  [tokens[i] + tokens[i + 1]], 3 << (len(tokens) - i - 2)))
 
         return fixed_candidates
 
-
     @lru_cache(maxsize=128)
-    def predict(self, token_1, token_2):
-        return self.model.predict_proba(self.features_to_join(token_1,
-                                                              token_2))
+    def condition(self, token_1, token_2):
+        p_1 = self.lan_model.P_query(token_1, 'unigram')[1]
+        p_2 = self.lan_model.P_query(token_2, 'unigram')[1]
+        p_3 = self.lan_model.P_query(token_1 + token_2, 'unigram')[1]
 
-    def build_split(self, query_uno):
-        query_splitted = []
-        for query in query_uno:
-            if len(query) > 1 and np.random.random() > 0.9:
-                i = np.random.randint(1, len(query))
-                query_splitted.append([query[:i], query[i:]])
-        return query_splitted
-
-    def build_join_X(self, queries, splitted_queries):
-        X = []
-        y = np.array([0] * len(queries) + [1] * len(splitted_queries))
-        for query in chain(queries, splitted_queries):
-            X.append(self.features_to_join(query[0], query[1]))
-        X = np.array(X)
-        indx = np.random.permutation(np.arange(len(y)))
-
-        return X[indx].reshape((X.shape[0], -1)), y[indx]
-
-
-    @lru_cache(maxsize=128)
-    def features_to_join(self, token_1, token_2):
-        lm_features_1 = np.array(self.lan_model(token_1))
-        lm_features_2 = np.array(self.lan_model(token_2))
-        lm_features_join = np.array(self.lan_model(token_1 + token_2))
-
-        lm_features_diff_1 = lm_features_join - lm_features_1
-        lm_features_diff_2 = lm_features_join - lm_features_2
-
-        lens_features = np.array([len(token_1), len(token_2),
-                                  len(token_1) + len(token_2)])
-
-        result = np.concatenate((lm_features_1, lm_features_2, lm_features_join,
-                                 lm_features_diff_1, lm_features_diff_2,
-                                 lens_features)).reshape((1, -1))
-        return result
+        return p_3 < max(p_1, p_2)
 
 
 class SplitGenerator:
@@ -249,69 +214,38 @@ class SplitGenerator:
     def fit(self, X, y):
         self.model.fit(X, y)
 
-    def generate(self, tokens, joiner):
-        new_tokens = []
-        for token in tokens:
-            if len(token) > 2:
-                prob = self.predict(token)
-                print(prob)
-                if prob[0][1] > 0.5: #возможно надо делить
-                    new_tokens += self.split_by_joiner(tokens, joiner)
-                else:
-                    new_tokens.append(token)
-            else:
-                new_tokens.append(token)
+    def generate(self, query, correction_mask): #query is tokens
+        corrections = []
+        for index in np.where(correction_mask == 0)[0]:
+            corrections += self.candidates(query[index], index, len(query))
 
-        return new_tokens
+        return corrections
 
+    def candidates(self, word, index, query_len):
+        if len(word) == 1:
+            return []
 
-    def split_by_joiner(self, token, joiner):
-        probs = []
-        for i in range(2):
-            probs.append(joiner.predict(token[:i + 1], token[i + 1:])[1])
-            probs.append(joiner.predict(token[:-(i + 1)], token[-(i + 1):])[1])
+        fixed_candidates = []
+        p_3 = self.lan_model.P_query(word, 'unigram')[1]
 
-        argmin = np.argmin(probs)
-        print(prob)
+        for i in range(1, len(word) - 1):
+            token_1 = word[:i]
+            token_2 = word[i:]
 
-        if probs[argmin] < 0.2: #мы почти уверены что соединять не надо, значит можно делить
-            i = 1 + argmin >=2
-            i *= -1 ** (argmin % 2)
-            result = [token[:i], token[i:]]
-        else:
-            result = [token]
+            condition = self.condition(token_1, token_2, p_3)
 
-        return result
+            if condition: #если вероятность хб одной части больше чем всего токена
+                fixed_candidates.append((index, index + 1,  [token_1, token_2], 1 << (query_len - index - 1)))
 
+        return fixed_candidates
 
     @lru_cache(maxsize=128)
-    def predict(self, token):
-        return self.model.predict_proba(self.features_to_split(token))
+    def condition(self, token_1, token_2, p_3):
+        p_1 = self.lan_model.P_query(token_1, 'unigram')[1]
+        p_2 = self.lan_model.P_query(token_2, 'unigram')[1]
 
+        return p_3 > min(p_1, p_2)
 
-    def build_join(self, query_double):
-        query_joined = []
-        for query in query_double:
-            if np.random.random() > 0.9:
-                query_joined.append("".join(query))
-        return query_joined
-
-
-    def build_split_X(self, queries, joined_queries):
-        X = []
-        y = np.array([0] * len(queries) + [1] * len(joined_queries))
-        for query in chain(queries, joined_queries):
-            X.append(self.features_to_split(query))
-        X = np.array(X)
-        indx = np.random.permutation(np.arange(len(y)))
-
-        return X[indx].reshape((X.shape[0], X.shape[-1])), y[indx]
-
-
-    @lru_cache(maxsize=128)
-    def features_to_split(self, query):
-        features = np.array(self.lan_model(query) + [len(query)]).reshape((1, -1))
-        return features
 
 
 def process_queries(filename):
@@ -330,89 +264,4 @@ def process_queries(filename):
 
     return queries, queries_correction
 
-#%%
-if __name__ == '__main__':
-    queries, queries_correction = process_queries('queries_all.txt')
-
-    lm = LanguageModel()
-    lm.fit(queries)
-
-    em = ErrorModel()
-    em.fit(queries_correction)
-
-
-#%%
-    with open('join_split_generators.pcl', 'rb') as f:
-        join_gen, split_gen = pickle.load(f)
-#%%
-    print(split_gen.predict('вовсех'))
-    print(split_gen.predict('сккачатьигру'))
-    print(split_gen.predict('признание'))
-    print(split_gen.predict('моямама'))
-    print(split_gen.predict('невыдуманная'))
-    print(split_gen.predict('сказкаи'))
-
-#%%
-
-    print(lm.P_query(None, 'bigram', tuple(['когда', 'рас', 'пускаются', 'почки']))[1])
-
-    #split_gen_2 = SplitGenerator(lm)
-    #split_gen_2.model = split_gen.model
-
-    #print(split_gen_2.generate(['всех'], join_gen))
-#%%
-#    for query in queries:
-        #new_query = join_gen.generate(query.split(' '))
-#        new_query = split_gen_2.generate(query.split(' '), join_gen)
-#        if new_query != query.split(' '):
-#            print(query,'-->', new_query)
-
-#%%
-    key_swapper = KeyboardSwapper(lm)
-    input_ = 'купить ноутбук asus'
-    result_1 = key_swapper.generate(input_)
-    result_2 = key_swapper.generate(" ".join(result_1))
-
-    #assert(" ".join(result_2) == input_)
-#%%
-    print(key_swapper.en_ru['?'])
-
-
-#%%
-    print(key_swapper.generate('relf c[jlbnm gjuekznm'))
-    print(key_swapper.generate('cjkjvf ytljhjuj'))
-    print(key_swapper.generate('clfnm ht,tyrf d ghb.n'))
-    print(key_swapper.generate('аднштп щт еру ьщщт'))
-    print(key_swapper.generate('.n.,'))
-    print(key_swapper.generate('мл'))
-
-    print(result_1, result_2)
-    print(lm('vk'))
-    print(lm('мл'))
-    print(lm('d'))
-    print(lm('в'))
-
-    print(key_swapper.generate('!(молодцы)'))
-
-#%%
-    for i in range(10000,30000):
-        #if 'dj' in queries_tokens[i]:
-        #    print(queries_tokens[i])
-        res = key_swapper.generate(queries[i].lower())
-        #print(queries[i], '--->',' '.join(res))
-
-
-#%%
-
-    frequency = []
-    words = []
-    for query in queries:
-        if len(query) > 0:
-            frequency.append(lm.query_frequences(query))
-            if frequency[-1] < 10:
-                words.append(query)
-
-    for word in np.unique(words):
-        #print(word, '--->', key_swapper.generate(word))
-        key_swapper.generate(word)
 
