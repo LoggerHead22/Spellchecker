@@ -13,12 +13,12 @@ class FuzzySearch:
         self.queue = []
 
     def fit(self, queries):
-        words = itertools.chain(*map(lambda x: re.findall(r'\w+', x.lower()),  queries))
-
         print('Building trie...')
-        for token in words:
-            if token.isdigit() == False and len(token) < 25:
-                self.trie.add(str(token))
+        for query in queries:
+            words = re.findall(r'\w+', query)
+            for token in words:
+                if token.isdigit() == False and len(token) < 25:
+                    self.trie.add(str(token))
         print('Cleaning trie...')
         self.del_garbage(self.trie.root_node)
         print('Computing trie freq...')

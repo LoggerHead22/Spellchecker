@@ -148,4 +148,8 @@ def process_queries(filename):
 #%%
 if __name__ == '__main__':
     spellchecker = Spellchecker()
-    spellchecker.start()
+    #spellchecker.start()
+    queries, queries_correction = process_queries('queries_all.txt')
+
+    for query in queries[:100]:
+        print(spellchecker.process_query(query))

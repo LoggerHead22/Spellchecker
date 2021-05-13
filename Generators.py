@@ -166,10 +166,10 @@ class CorrectionGenerator:
 class JoinGenerator:
     def __init__(self, lm, soundex):
         self.lan_model = lm
-        self.model = RandomForestClassifier(min_samples_split=10,
-                                            min_samples_leaf=5,
-                                            max_features='sqrt',
-                                            max_samples=0.7)
+        #self.model = RandomForestClassifier(min_samples_split=10,
+        #                                    min_samples_leaf=5,
+        #                                    max_features='sqrt',
+        #                                    max_samples=0.7)
 
         self.soundex_dict = soundex
         self.soundex_encoder = RussianSoundex(delete_first_letter=True)
@@ -208,9 +208,9 @@ class JoinGenerator:
 class SplitGenerator:
     def __init__(self, lm):
         self.lan_model = lm
-        self.model = RandomForestClassifier(min_samples_leaf=5,
-                                            max_features='sqrt',
-                                            max_samples=0.7)
+        #self.model = RandomForestClassifier(min_samples_leaf=5,
+        #                                    max_features='sqrt',
+        #                                    max_samples=0.7)
     def fit(self, X, y):
         self.model.fit(X, y)
 
@@ -244,7 +244,7 @@ class SplitGenerator:
         p_1 = self.lan_model.P_query(token_1, 'unigram')[1]
         p_2 = self.lan_model.P_query(token_2, 'unigram')[1]
 
-        return p_3 > min(p_1, p_2)
+        return p_3 > max(p_1, p_2)
 
 
 

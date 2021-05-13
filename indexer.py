@@ -53,29 +53,28 @@ def fit_models(alpha_em=1.2, oper_weights=[0.7, 0.8, 0.9, 0.8]):
 
     print('Fitting Soundex collection')
     t1 = time.process_time()
-    words = itertools.chain(*map(lambda x: re.findall(r'\w+', x),  queries))
+    #words = itertools.chain(*map(lambda x: re.findall(r'\w+', x),  queries))
     soundex = RussianSoundex(delete_first_letter=True)
     soundex_dict = dict()
-    for word in words:
-        if len(word) > 2 and len(word) < 20 and word.isalpha():
-            try:
-                code = soundex.transform(word)
-                if code not in soundex_dict:
-                    soundex_dict[code] = Counter([word])
-                else:
-                    soundex_dict[code].update([word])
-            except:
-                #print('Error word:', word)
-                continue
-    del_list = []
-    for key in soundex_dict:
-        if key.isupper():
-            del_list.append(key)
-        else:
-            soundex_dict[key] = soundex_dict[key].most_common(5)
+    for query in queries:
+        words = re.findall(r'\w+', query)
+        for word in words:
+            if len(word) > 2 and len(word) < 20 and word.isalpha():
+                try:
+                    code = soundex.transform(word)
+                    if code.isupper():
+                        continue
 
-    for key in del_list:
-        del soundex_dict[key]
+                    if code not in soundex_dict:
+                        soundex_dict[code] = Counter([word])
+                    else:
+                        soundex_dict[code].update([word])
+                except:
+                    #print('Error word:', word)
+                    continue
+
+    for key in soundex_dict:
+        soundex_dict[key] = soundex_dict[key].most_common(5)
 
     print('Soundex collection fitted, time:', time.process_time() - t1)
 
